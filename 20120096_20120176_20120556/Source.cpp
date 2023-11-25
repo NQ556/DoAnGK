@@ -79,6 +79,21 @@ void formatVolume(const string& volumeName, const BootSector& bootSector,
     }
 }
 
+string hashPassword(string pass) {
+    SHA256 sha;
+    sha.update(pass);
+    std::array<uint8_t, 32> digest = sha.digest();
+    string passhash = SHA256::toString(digest);
+
+    int size_rubbish;
+    size_rubbish = rand() % 62;
+    string characters = "rstuvwxyzabcEFGHIJKL123456defghijklmnoMNOPQRSTUVWXYZ0pqABCD789";
+
+    string subString = characters.substr(0, size_rubbish);
+    string hash = to_string(size_rubbish + 11) + subString + passhash;
+    return hash;
+}
+
 void importFile(const string& volumeName, BootSector& bootSector,
     FatTable& fatTable, const string& fileName, const string& extension) {
     // Mở Volume để đọc và ghi
@@ -112,11 +127,7 @@ void importFile(const string& volumeName, BootSector& bootSector,
     {
         Entry existingEntry;
 
-        if (i >= 1)
-        {
-            volumeFile.read(reinterpret_cast<char*>(&existingEntry), sizeof(Entry));
-        }
-        
+        volumeFile.read(reinterpret_cast<char*>(&existingEntry), sizeof(Entry));
 
         if (strcmp(existingEntry.MainName, fileName.c_str()) == 0)
         {
@@ -157,9 +168,12 @@ void importFile(const string& volumeName, BootSector& bootSector,
     strcpy(newFileEntry.Extension, extension.c_str());
     newFileEntry.setFileSize(static_cast<uint32_t>(fileSize));
     newFileEntry.setStartCluster(freeCluster);
+    newFileEntry.setPassSize(0);
 
     int choice = 0;
-    string tmp = "";
+    string password = "";
+    string hash = "";
+    bool isSetPassword = false;
 
     if (!isListEmpty(volumeName, fatTable))
     {
@@ -172,9 +186,10 @@ void importFile(const string& volumeName, BootSector& bootSector,
             if (choice == 1)
             {
                 cout << "Password: ";
-                cin >> tmp;
-                newFileEntry.setPassSize(tmp.length());
-                newFileEntry.setPassword(tmp);
+                cin >> password;
+                hash = hashPassword(password);
+                newFileEntry.setPassSize(hash.size());
+                isSetPassword = true;
             }
 
             else if (choice == 2)
@@ -188,6 +203,7 @@ void importFile(const string& volumeName, BootSector& bootSector,
     volumeFile.seekp(sizeof(BootSector) + fatTable.size * sizeof(uint16_t) +
         rootDirectoryEntry.getNumEntryChild() * sizeof(Entry), ios::beg);
     volumeFile.write(reinterpret_cast<const char*>(&newFileEntry), sizeof(Entry));
+    volumeFile.write(hash.c_str(), newFileEntry.getPassSize());
 
     // Tăng số entry có trong root directory
     rootDirectoryEntry.setNumEntryChild(rootDirectoryEntry.getNumEntryChild() + 1);
@@ -202,7 +218,7 @@ void importFile(const string& volumeName, BootSector& bootSector,
 
     // Tính starting position để bắt đầu ghi nội dung file vào volume
     uint64_t fileContentStart = sizeof(BootSector) + fatTable.size * sizeof(uint16_t) +
-        bootSector.getNumberOfEntry() * sizeof(Entry) +
+        bootSector.getNumberOfEntry() * sizeof(Entry) + newFileEntry.getPassSize() +
         (freeCluster - 2) * bootSector.getNumSectorPerCluster() *
         bootSector.getnumBytePerSector();
 
@@ -255,6 +271,23 @@ void exportFile(const string& volumeName, BootSector& bootSector,
         cout << "File '" << fileName << "' không có trong volume." << endl;
         volumeFile.close();
         return;
+    }
+
+    const uint16_t bufferSize = fileEntry.getPassSize();
+    string passwordInput = "";
+    if (bufferSize > 0)
+    {
+        cout << "Nhập mật khẩu: " << endl;
+        cin >> passwordInput;
+        vector<char> passwordBuffer(bufferSize);
+        volumeFile.read(passwordBuffer.data(), bufferSize);
+        string password(passwordBuffer.data(), bufferSize);
+
+        if (password.compare(passwordInput) != 0)
+        {
+            cout << "Sai mật khẩu. Xuất file không thành công." << endl;
+            return;
+        }
     }
 
     // Tạo một file mới để export
@@ -356,24 +389,15 @@ void listFiles(const string& volumeName, const BootSector& bootSector, const Fat
     cout << "Danh sách các file trong root directory:" << endl;
     for (uint16_t i = 1; i < rootDirectoryEntry.getNumEntryChild(); ++i) 
     {
+        
         Entry fileEntry;
-        try 
-        {
-            volumeFile.read(reinterpret_cast<char*>(&fileEntry), sizeof(Entry));
-            
-        }
-        catch (const std::exception& e) 
-        {
-            // Error
-        }
+        volumeFile.read(reinterpret_cast<char*>(&fileEntry), sizeof(Entry));
+        
 
-        if (fileEntry.MainName[0] != '\0')
-        {
-            cout << "File Entry: Tên = " << fileEntry.MainName << "." << fileEntry.Extension
-                << ", Kích thước = " << fileEntry.getFileSize() << " bytes" << endl;
-            return;
-            
-        }  
+        cout << "File Entry: Tên = " << fileEntry.MainName << "." << fileEntry.Extension
+            << ", Kích thước = " << fileEntry.getFileSize() << " bytes" << endl;
+
+        
     }
 
     volumeFile.close();

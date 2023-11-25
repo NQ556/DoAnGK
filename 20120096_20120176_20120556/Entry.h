@@ -12,7 +12,6 @@ private:
     uint16_t numEntryChild;
     uint16_t numExtraEntry;
     uint16_t passSize;
-    string password;
 
 public:
     char MainName[6];
@@ -26,12 +25,10 @@ public:
     bool getIsDeleted();
     uint16_t getNumEntryChild();
     uint16_t getNumExtraEntry();
+    uint16_t getPassSize();
 
     void setNumEntryChild(uint16_t numEntryChild);
     void setStartCluster(uint16_t startCluster);
-
-    void setPassword(string pass);
-    string getPassword();
     void resetPass();
     void setPassSize(uint16_t passSize);
 };
