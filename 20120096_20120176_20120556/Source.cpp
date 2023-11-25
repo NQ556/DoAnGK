@@ -22,6 +22,7 @@ bool createVolume(const string& volumeName, uint64_t volumeSize, BootSector& boo
             cout << "Password: ";
             cin >> tmp;
             bootSector.setPassSize(tmp.length());
+            bootSector.setPassword(tmp);
         }
     } while (inputpass == "No");
 
@@ -110,11 +111,16 @@ void importFile(const string& volumeName, BootSector& bootSector,
     for (uint16_t i = 0; i < rootDirectoryEntry.getNumEntryChild(); ++i) 
     {
         Entry existingEntry;
-        volumeFile.read(reinterpret_cast<char*>(&existingEntry), sizeof(Entry));
 
-        if (strcmp(existingEntry.MainName, fileName.c_str()) == 0) 
+        if (i >= 1)
         {
-            cout << "File '" << fileName << "' đã tồn tại trong root directory." << endl;
+            volumeFile.read(reinterpret_cast<char*>(&existingEntry), sizeof(Entry));
+        }
+        
+
+        if (strcmp(existingEntry.MainName, fileName.c_str()) == 0)
+        {
+            std::cout << "File '" << fileName << "' đã tồn tại trong root directory." << std::endl;
             volumeFile.close();
             sourceFile.close();
             return;
@@ -151,6 +157,32 @@ void importFile(const string& volumeName, BootSector& bootSector,
     strcpy(newFileEntry.Extension, extension.c_str());
     newFileEntry.setFileSize(static_cast<uint32_t>(fileSize));
     newFileEntry.setStartCluster(freeCluster);
+
+    int choice = 0;
+    string tmp = "";
+
+    if (!isListEmpty(volumeName, fatTable))
+    {
+        do
+        {
+            cout << "Bạn có muốn đặt mật khẩu cho file không?" << endl;
+            cout << "1. Có." << endl;
+            cout << "2. Không" << endl;
+            cin >> choice;
+            if (choice == 1)
+            {
+                cout << "Password: ";
+                cin >> tmp;
+                newFileEntry.setPassSize(tmp.length());
+                newFileEntry.setPassword(tmp);
+            }
+
+            else if (choice == 2)
+            {
+                break;
+            }
+        } while (choice != 1 && choice != 2);
+    }
 
     // Ghi entry mới vào volume
     volumeFile.seekp(sizeof(BootSector) + fatTable.size * sizeof(uint16_t) +
@@ -320,21 +352,27 @@ void listFiles(const string& volumeName, const BootSector& bootSector, const Fat
         return;
     }
 
-    // Loop qua các mục trong root directory
+    // Loop qua từng file trong root directory
     cout << "Danh sách các file trong root directory:" << endl;
-    for (uint16_t i = 0; i < rootDirectoryEntry.getNumEntryChild(); ++i) 
+    for (uint16_t i = 1; i < rootDirectoryEntry.getNumEntryChild(); ++i) 
     {
         Entry fileEntry;
-        if (!volumeFile.read(reinterpret_cast<char*>(&fileEntry), sizeof(Entry))) 
+        try 
         {
-            break;  
-            // Lỗi đọc entry
+            volumeFile.read(reinterpret_cast<char*>(&fileEntry), sizeof(Entry));
+            
+        }
+        catch (const std::exception& e) 
+        {
+            // Error
         }
 
         if (fileEntry.MainName[0] != '\0')
         {
             cout << "File Entry: Tên = " << fileEntry.MainName << "." << fileEntry.Extension
                 << ", Kích thước = " << fileEntry.getFileSize() << " bytes" << endl;
+            return;
+            
         }  
     }
 

@@ -12,7 +12,7 @@ int main()
 
     BootSector bootSector = BootSector(volumeSize);
     FatTable fatTable = FatTable(bootSector.getFatSize());
-
+    bool exceptionThrown = false;
 
     do
     {

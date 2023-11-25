@@ -5,6 +5,7 @@
 #include "FatTable.h"
 #include "Entry.h"
 #include <fstream>
+#include <stdexcept>
 
 bool createVolume(const string& volumeName, uint64_t volumeSize, BootSector& bootSector);
 void formatVolume(const string& volumeName, const BootSector& bootSector, const FatTable& fatTable);
